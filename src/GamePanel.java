@@ -7,30 +7,35 @@ import java.util.*;
 public class GamePanel extends JPanel implements Runnable, KeyListener
 {
     //FIELDS
-    public static int WIDTH = 400;
-    public static int HEIGHT = 400;
+    static int WIDTH = 400;
+    static int HEIGHT = 400;
 
     private Thread thread;
-    private boolean running;
 
     // this is our canvas to draw image on
     private BufferedImage image;
     // this is our pantbrush
     private Graphics2D g;
 
-    // control update speed
-    private int FPS = 30; // frame per second
-    private double averageFPS;
-
-    // player
-    public static Player player;
+    /* player */
+    private static Player player;
     //Bullets
-    public static ArrayList<Bullet> bullets;
+    static ArrayList<Bullet> bullets;
     // Enemies
-    public static ArrayList<Enemy> enemies;
+    private static ArrayList<Enemy> enemies;
+    // PowerUP
+    private static ArrayList<PowerUp> powerUps;
+
+    // Wave Spawning System
+    private long waveStartTimer;
+    private long waveStartTimerDiff; // track time passed by and compare with waveDelay requirement
+    private int waveNumber;
+    private boolean waveStart;
+    private int waveDelay = 2000; // 2 seconds delay
+
 
     // CONSTRUCTOR
-    public GamePanel()
+    GamePanel()
     {
         super(); // call  JPanel super() constructor // create a new JPanel with a double buffer and a flow layout
         setPreferredSize(new Dimension(WIDTH, HEIGHT));
@@ -59,36 +64,50 @@ public class GamePanel extends JPanel implements Runnable, KeyListener
     @Override
     public void run()
     {
-        running = true;
+//        boolean running = true;
 
         // instantiate canvas and paintbrush
         image = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
         g = (Graphics2D)image.getGraphics(); // note: this graphics is for offScreen image drawing, check gameDraw to see how to get to game Screen graphics object
-
+        // aa for the graphics
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         // instantiate a player
         player = new Player();
         //instantiate bullets
-        bullets = new ArrayList<Bullet>();
+        bullets = new ArrayList<>();
         // instantiate enemies
-        enemies = new ArrayList<Enemy>();
-        // add 5 enemies by computer
-        for (int i = 0; i < 5; i++ )
-        {
-            enemies.add(new Enemy(1, 1));
-        }
+        enemies = new ArrayList<>();
+        // for testing add 5 enemies by computer
+        //for (int i = 0; i < 5; i++ )
+        //{
+        //	enemies.add(new Enemy(1, 1));
+        //}
+
+        // Instantiate powerups //
+        powerUps = new ArrayList<>();
+
+        // instantiate enemy wave spawning system
+        waveStartTimer = 0;
+        waveStartTimerDiff = 0;
+        waveStart = true; // or false is fine
+        waveNumber = 0;
 
         // for controlling update speed
         long startTime; // in nanoSecond
         long URDTimeMillis; // this is Update + Render + Draw time in millisecond
         long waitTime; // in millisecond
         long totalTime = 0; // in nanoSecond
+        // control update speed
+        // frame per second
+        int FPS = 30;
         long targetTime = 1000 / FPS; // the milliseconds for one loop to run to achieve 30 FPS;
 
         int frameCount = 0;
         int maxFrameCount = 30;
 
         // Game Loop
-        while(running)
+        while(true)
         {
             // To run in each frame update, reset at end of each second (when FPS reach maxFPS)
             // for controlling update speed - set the speed limit for the loop
@@ -106,7 +125,7 @@ public class GamePanel extends JPanel implements Runnable, KeyListener
             try
             {
                 Thread.sleep(waitTime);
-            }catch(Exception e) {}
+            }catch(Exception ignored) {}
 
             // add up totalTime
             totalTime += System.nanoTime() - startTime;
@@ -116,15 +135,40 @@ public class GamePanel extends JPanel implements Runnable, KeyListener
             if (frameCount == maxFrameCount)
             {
                 //******* TODO: not sure why averageFPS is needed?
-                averageFPS = 1000.0 / ((totalTime /frameCount)/1000000);
+                double averageFPS = 1000.0 / ((totalTime / frameCount) / 1000000.0);
                 totalTime = 0;
                 frameCount = 0;
             }
         }
     }
 
+    // create waves, players, enemies, bullets, remove bullets, enemies, define collisions
+
     private void gameUpdate()
     {
+        // new Wave - each time to reset timer and after all enemies died
+        if (waveStartTimer == 0 && enemies.size() == 0) // game hasn't start yet && no enemy has been created
+        {
+            waveNumber ++; // waveNumber starts to count from 1;
+            waveStart = false; // don't create enemy yet, give time to show "WAVE 1" on screen with waveDelay set up
+            waveStartTimer = System.nanoTime(); //wave timer start
+        } else
+        {
+            waveStartTimerDiff = (System.nanoTime() - waveStartTimer) / 1000000 ; // in millisecond
+            if (waveStartTimerDiff >= waveDelay)  // if waited for 2 second
+            {
+                waveStart = true;
+                waveStartTimer =0; // timer reset to 0, wait all enemies die before start another wave
+                waveStartTimerDiff = 0;
+            }
+        }
+
+        //create enemies according to waveStart
+        if(waveStart && enemies.size() == 0) // enemies are created together, wait till all enemies are died before the new wave of creating enemies
+        {
+            createNewEnemies();
+        }
+
         // update player
         player.update();
 
@@ -140,9 +184,19 @@ public class GamePanel extends JPanel implements Runnable, KeyListener
         }
 
         // update enemies // set ready // enemies bounce off the walls
-        for (int i = 0; i < enemies.size(); i++ )
+        for (Enemy enemy : enemies) {
+            enemy.update();
+        }
+
+        // powerUps updates
+        for( int i = 0; i < powerUps.size(); i++ )
         {
-            enemies.get(i).update();
+            boolean remove = powerUps.get(i).update();
+            if(remove)
+            {
+                powerUps.remove(i);
+                i--;
+            }
         }
 
         // check for collision bullet-enemy
@@ -152,9 +206,7 @@ public class GamePanel extends JPanel implements Runnable, KeyListener
             double bx = b.getx();
             double by = b.gety();
             double br = b.getr();
-            for (int j = 0; j < enemies.size(); j++)
-            {
-                Enemy e = enemies.get(j);
+            for (Enemy e : enemies) {
                 double ex = e.getx();
                 double ey = e.gety();
                 double er = e.getr();
@@ -164,8 +216,7 @@ public class GamePanel extends JPanel implements Runnable, KeyListener
 
                 double dist = Math.sqrt(dx * dx + dy * dy);
 
-                if ( dist < br + er)
-                {
+                if (dist < br + er) {
                     e.hit();
                     bullets.remove(i);
                     i--;
@@ -174,43 +225,111 @@ public class GamePanel extends JPanel implements Runnable, KeyListener
             }
         }
 
-        // remove dead enemy from enemyList
+        // remove dead enemy from enemyList // and meanwhile drop randomly a powerUp square
         for(int i = 0; i < enemies.size(); i++ )
         {
-            if(enemies.get(i).isDead())
+            Enemy e = enemies.get(i);
+            if(e.isDead())
             {
+                // by chances, to produce powerup squares when enemy dies
+                double rand = Math.random();
+                if (rand < 0.001)
+                    powerUps.add(new PowerUp(1, e.getx(), e.gety()));
+                else if (rand < 0.02) powerUps.add(new PowerUp(3, e.getx(), e.gety()));
+                else if (rand < 0.12) powerUps.add(new PowerUp(2, e.getx(), e.gety()));
+
+                player.addScore(e.getType() + e.getRank());
                 enemies.remove(i);
                 i--;
             }
         }
 
+        // player-enemy collision
+        if( !player.isRecovering() )  // when not get hit by enemy
+        {
+            double px = player.getx();
+            double py = player.gety();
+            double pr = player.getr();
 
+            for (Enemy enemy : enemies) {
+                double ex = enemy.getx();
+                double ey = enemy.gety();
+                double er = enemy.getr();
 
+                double dx = px - ex;
+                double dy = py - ey;
+                double dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < pr + er) player.loseLife();
+            }
+        }
     }
+
+    // draw everything onto the screen
 
     private void gameRender()
     {
         // use double buffering by Jpanel
         // test Run - draw to offScreen. you need gameDraw() to bring the image to the front game panel to be shown
+
+        // draw background
         g.setColor(new Color(0, 100, 255));
         g.fillRect(0,0,WIDTH,HEIGHT);
-        g.setColor(Color.WHITE);
-        g.drawString("FPS " + averageFPS, 10, 10);
-        g.drawString("num bullets " + bullets.size(), 10,20);
+
+
         // render a playerj
         player.draw(g);
 
         // render a list of bullets
-        for(int i = 0; i<bullets.size(); i++ )
-        {
-            bullets.get(i).draw(g);
+        for (Bullet bullet : bullets) {
+            bullet.draw(g);
         }
 
         // draw enemies
-        for (int i = 0; i < enemies.size(); i++ )
-        {
-            enemies.get(i).draw(g);
+        for (Enemy enemy : enemies) {
+            enemy.draw(g);
         }
+
+        // draw powerups
+        for (PowerUp powerUp : powerUps) {
+            powerUp.draw(g);
+        }
+
+        // draw wave number notification
+        if(waveStartTimer != 0)
+        {
+            g.setFont(new Font("Century Gothic", Font.PLAIN, 18));
+            String s = "- W A V E   " + waveNumber + "   -";
+            // string s pixel length
+            int length = (int) g.getFontMetrics().getStringBounds(s,g).getWidth();
+            // make the string sign fade out using sine - pulsate in and out effect, using alpha transparent
+            double alphaIndex = Math.sin(3.14 * waveStartTimerDiff / waveDelay);  // the alpha turn from 255 to 0 following sin from 0 to 3.14
+            int alpha = (int) (255 * alphaIndex);
+            // make sure alpha is kept within 255;
+            if(alpha > 255) alpha = 255;
+            g.setColor(new Color(255, 255, 255, alpha));
+            g.drawString(s, WIDTH/2 - length/2, HEIGHT/2);
+            // g.drawString("" + alphaIndex, 10,10);
+        }
+
+        // draw player lives
+        for (int i = 0; i < player.getLives(); i++)
+        {
+            // draw player circle
+            g.setColor(Color.WHITE);
+            g.fillOval(20 + (20 * i), 20, player.getr() *2, player.getr() *2);
+            // draw player circle boundry
+            g.setStroke(new BasicStroke(3));
+            g.setColor(Color.WHITE.darker());
+            g.drawOval(20 + (20 * i), 20, player.getr() *2, player.getr() *2);
+            // reset stroke
+            g.setStroke(new BasicStroke(1));
+        }
+
+        // draw player score
+        g.setColor(Color.WHITE);
+        g.setFont(new Font("Century Gothic", Font.PLAIN, 14));
+        g.drawString("Score: " + player.getScore(), WIDTH - 100,30);
     }
 
     private void gameDraw() // you basically only need this 3 lines for gameDraw always
@@ -220,6 +339,28 @@ public class GamePanel extends JPanel implements Runnable, KeyListener
         Graphics g2  = this.getGraphics(); // this graphics is for game  panel drawImage as a whole. You won't see the image is actually drawn bit by bit or line by line
         g2.drawImage(image, 0,0,null);
         g2.dispose();
+    }
+
+    private void createNewEnemies()
+    {
+        // for a sanity check, clear enemies arrayList
+        enemies.clear();
+        //Enemy e;
+
+        if(waveNumber == 1)
+        {
+            for(int i =0; i<4;i++)
+            {
+                enemies.add(new Enemy(1,1));
+            }
+        }
+        if (waveNumber == 2)
+        {
+            for(int i =0; i<8;i++)
+            {
+                enemies.add(new Enemy(1,1));
+            }
+        }
     }
 
     // implements 3 methods of keylistener

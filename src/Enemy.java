@@ -1,6 +1,6 @@
 import java.awt.*;
 
-public class Enemy
+class Enemy
 {
     // FIELDS
     private double x;
@@ -9,7 +9,6 @@ public class Enemy
 
     private double dx;
     private double dy;
-    private double radian;
     private double speed;
 
     private int health;
@@ -23,7 +22,7 @@ public class Enemy
 
 
     // CONSTRUCTOR
-    public Enemy(int type, int rank)
+    Enemy(int type, int rank)
     {
         this.type = type;
         this.rank = rank;
@@ -35,19 +34,19 @@ public class Enemy
             // the weakest enemy
             if(rank == 1 )
             {
-                speed = 2;
+                speed = 2.0;
                 r = 5;
                 health = 1;
             }
         }
 
         // set random x and y position
-        x = Math.random() * GamePanel.WIDTH / 2 + GamePanel.WIDTH / 4;
+        x = Math.random() * GamePanel.WIDTH / 2 + GamePanel.WIDTH / 4.0;
         y = -r; // set y offScreen
 
         // set angle downward from 20degree to 160 degree
         double angle = Math.random() * 140 + 20;
-        radian = Math.toRadians(angle);
+        double radian = Math.toRadians(angle);
 
         dx = Math.cos(radian) * speed;
         dy = Math.sin(radian) * speed;
@@ -57,19 +56,21 @@ public class Enemy
     }
 
     // FUNCTIONS
-    public double getx() {return x;}
-    public double gety() {return y;}
-    public double getr() {return r;}
-    public boolean isDead() { return dead;}
+    double getx() {return x;}
+    double gety() {return y;}
+    double getr() {return r;}
+    int getType() { return type;}
+    int getRank() { return rank; }
+    boolean isDead() { return dead;}
 
-    public void hit()
+    void hit()
     {
         health--;
         if(health <= 0)
             dead = true;
     }
 
-    public void update (){
+    void update(){
         x += dx;
         y += dy;
         // when x and y are within the game boundry, set ready to true
@@ -90,14 +91,14 @@ public class Enemy
 
     }
 
-    public void draw(Graphics2D g)
+    void draw(Graphics2D g)
     {
         g.setColor(color1);
-        g.fillOval((int) (x-r), (int) (y-r), 2*r, 2*r);
+        g.fillOval( (int)(x-r),(int)(y-r), 2*r, 2*r);
 
         g.setStroke(new BasicStroke(3));
         g.setColor(color1.darker());
-        g.drawOval((int) (x-r), (int) (y-r), 2*r, 2*r);
+        g.drawOval((int) (x-r),(int) (y-r), 2*r, 2*r);
 
         g.setStroke(new BasicStroke(1));
     }

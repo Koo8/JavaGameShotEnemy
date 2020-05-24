@@ -1,7 +1,7 @@
 import javax.swing.JFrame;
 
-/** This is the main class to run the game **/
-/** This only contains a main method **/
+/** This is the main class to run the game
+This only contains a main method **/
 
 public class Game
 {
